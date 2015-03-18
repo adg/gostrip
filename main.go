@@ -59,7 +59,11 @@ func main() {
 		dief("cloning repo: %v\n", err)
 	}
 
-	cmd = exec.Command("./make.bash")
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command(".\\make.bat")
+	} else {
+		cmd = exec.Command("./make.bash")
+	}
 	cmd.Dir = filepath.Join(dest, "src")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -72,7 +76,7 @@ func main() {
 		pat = strings.Replace(pat, "GOARCH", runtime.GOARCH, -1)
 
 		name := filepath.Join(dest, pat)
-		if err := os.RemoveAll(name); err != nil {
+		if err := osAwareRemoveAll(name); err != nil {
 			dief("removing %v: %v\n", name, err)
 		}
 	}
@@ -94,10 +98,35 @@ func main() {
 		dief("looking for test data: %v\n", err)
 	}
 	for _, name := range remove {
-		if err := os.RemoveAll(name); err != nil {
+		if err := osAwareRemoveAll(name); err != nil {
 			dief("removing %v: %v\n", name, err)
 		}
 	}
+}
+
+func osAwareRemoveAll(path string) error {
+	fi, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		// skip if file not existed
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	if runtime.GOOS == "windows" {
+		mode := fi.Mode()
+		cmd := exec.Command("cmd.exe", "/C", "del", "/Q", "/F", "/S", path)
+
+		if mode.IsDir() {
+			cmd = exec.Command("cmd.exe", "/C", "rmdir", "/Q", "/S", path)
+		}
+
+		cmd.Stderr = os.Stderr
+		return cmd.Run()
+	}
+
+	return os.RemoveAll(path)
 }
 
 func dief(format string, args ...interface{}) {
